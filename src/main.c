@@ -33,22 +33,23 @@ static void btn_fxn(uint gpio, uint32_t eventMask) {
     //            Tarkista SDK, ja jos et löydä vastaavaa funktiota, sinun täytyy toteuttaa se itse.
     // Exercise 1: Toggle the LED. 
     //             Check the SDK and if you do not find a function you would need to implement it yourself. 
+    toggle_led();
 }
 
 static void sensor_task(void *arg){
     (void)arg;
     // Tehtävä 2: Alusta valoisuusanturi. Etsi SDK-dokumentaatiosta sopiva funktio.
     // Exercise 2: Init the light sensor. Find in the SDK documentation the adequate function.
-   
+    init_veml6030();
     for(;;){
         
         // Tehtävä 2: Muokkaa tästä eteenpäin sovelluskoodilla. Kommentoi seuraava rivi.
         //             
         // Exercise 2: Modify with application code here. Comment following line.
         //             Read sensor data and print it out as string; 
-        tight_loop_contents(); 
-
-
+        //tight_loop_contents(); 
+        
+        printf("Lux: %d\n", veml6030_read_light());
    
 
 
@@ -68,7 +69,7 @@ static void sensor_task(void *arg){
         
         // Exercise 2. Just for sanity check. Please, comment this out
         // Tehtävä 2: Just for sanity check. Please, comment this out
-        printf("sensorTask\n");
+        //printf("sensorTask\n");
 
         // Do not remove this
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -112,7 +113,7 @@ static void print_task(void *arg){
 
         // Exercise 3. Just for sanity check. Please, comment this out
         // Tehtävä 3: Just for sanity check. Please, comment this out
-        printf("printTask\n");
+        //printf("printTask\n");
         
         // Do not remove this
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -133,7 +134,6 @@ static void usbTask(void *arg) {
 }*/
 
 int main() {
-
     // Exercise 4: Comment the statement stdio_init_all(); 
     //             Instead, add AT THE END OF MAIN (before vTaskStartScheduler();) adequate statements to enable the TinyUSB library and the usb-serial-debug.
     //             You can see hello_dual_cdc for help
@@ -148,9 +148,9 @@ int main() {
     stdio_init_all();
 
     // Uncomment this lines if you want to wait till the serial monitor is connected
-    /*while (!stdio_usb_connected()){
+    while (!stdio_usb_connected()){
         sleep_ms(10);
-    }*/ 
+    } 
     
     init_hat_sdk();
     sleep_ms(300); //Wait some time so initialization of USB and hat is done.
@@ -160,6 +160,10 @@ int main() {
     // Tehtävä 1:  Alusta painike ja LEd ja rekisteröi vastaava keskeytys.
     //             Keskeytyskäsittelijä on määritelty yläpuolella nimellä btn_fxn
 
+    //Doesn't work with button1. Could it be broken?
+    init_button2();
+    init_led();
+    gpio_set_irq_enabled_with_callback(BUTTON2, GPIO_IRQ_EDGE_RISE, true, btn_fxn);
 
 
     
