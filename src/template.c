@@ -13,6 +13,7 @@
 // Default stack size for the tasks. It can be reduced to 1024 if task is not using lot of memory.
 #define DEFAULT_STACK_SIZE 2048 
 
+// Creating a structure to deal with IMU data and naming it imuData
 struct imu_data {
     float ax;
     float ay;
@@ -21,21 +22,24 @@ struct imu_data {
     float gy;
     float gz;
     float t;
-};
+} imuData = {.ax=0.0, .ay=0.0, .az=0.0, .gx=0.0, .gy=0.0, .gz=0.0, .t=0.0};
 
-struct imu_data imuData {
-    imuData.ax = 0.0;
-    imuData.ay = 0.0;
-    imuData.az = 0.0;
-    imuData.gx = 0.0;
-    imuData.gy = 0.0;
-    imuData.gz = 0.0;
-    imuData.t = 0.0;
-}
 
 //Add here necessary states
-enum state { IDLE=1, READ_DATA, UPDATE_DATA};
+enum state {IDLE=0, READ_IMU, UPDATE_DATA, READ_TAG};
 enum state programState = IDLE;
+
+//Creating task prototypes
+static void example_task(void *arg);
+static void imu_task(void *pvParameters);
+static void lcd_task(void *arg);
+static void btn_fxn(uint gpio, uint32_t eventMask);
+
+static void btn_fxn(uint gpio, uint32_t eventMask) {
+    programState = (programState + 1) % 3;
+    printf("Button pressed, changing state to %d\n", programState); // used copilot auo-completion for this line
+}
+
 
 static void example_task(void *arg){
     (void)arg;
@@ -46,9 +50,10 @@ static void example_task(void *arg){
     }
 }
 
+//Creating a task for reading data from IMU sensor
 static void imu_task(void *pvParameters) {
     (void)pvParameters;
-    if (programState == READ_DATA) {
+    if (programState == READ_IMU) {
     // Creating a pointer to imu_data structure
     struct imu_data *data = &imuData;
 
@@ -64,10 +69,13 @@ static void imu_task(void *pvParameters) {
     // Start collection data here. Infinite loop. 
     while (1)
     {
-        if (ICM42670_read_sensor_data(data->ax, data->ay, data->az, data->gx, data->gy, data->gz, data->t) == 0) {
+        if (ICM42670_read_sensor_data(&data->ax, &data->ay, &data->az, &data->gx, 
+            &data->gy, &data->gz, &data->t) == 0) {
             
-            printf("Accel: X=%f, Y=%f, Z=%f | Gyro: X=%f, Y=%f, Z=%f| Temp: %2.2f°C\n", data->ax, data->ay, data->az, 
-                data->gx, data->gy, data->gz, data->t);
+               
+
+            //printf("Accel: X=%f, Y=%f, Z=%f | Gyro: X=%f, Y=%f, Z=%f| Temp: %2.2f°C\n", data->ax, data->ay, data->az, 
+                //data->gx, data->gy, data->gz, data->t);
             
         } else {
             printf("Failed to read imu data\n");
@@ -77,6 +85,17 @@ static void imu_task(void *pvParameters) {
     }
 }
 
+//Creating a task for displaying morsecode in LCD
+static void lcd_task(void *arg) {
+    (void)arg;
+    if (programState == UPDATE_DATA) {
+        init_display();
+        for(;;){
+            write_text("---...---.\n");
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+    }
+}
 
 
 int main() {
@@ -88,8 +107,12 @@ int main() {
     init_hat_sdk();
     sleep_ms(300); //Wait some time so initialization of USB and hat is done.
 
-    TaskHandle_t myExampleTask = NULL;
-    // Create the tasks with xTaskCreate
+    // Initializing button2 and making an interruption when pressed to change the state. FYI the button1 seems not to work.
+    init_button2();
+    gpio_set_irq_enabled_with_callback(BUTTON2, GPIO_IRQ_EDGE_RISE, true, btn_fxn);
+
+    TaskHandle_t myExampleTask, IMUTask, LCDTask = NULL;
+    // Creating the tasks with xTaskCreate
     BaseType_t result = xTaskCreate(example_task,       // (en) Task function
                 "example",              // (en) Name of the task 
                 DEFAULT_STACK_SIZE, // (en) Size of the stack for this task (in words). Generally 1024 or 2048
@@ -101,7 +124,30 @@ int main() {
         printf("Example Task creation failed\n");
         return 0;
     }
+    result = xTaskCreate(imu_task, 
+                "IMU",
+                DEFAULT_STACK_SIZE,
+                NULL,
+                2, 
+                &IMUTask);
+    
+    if(result != pdPASS) {
+        printf("IMU Task creation failed\n");
+        return 0;
+    }
+    result = xTaskCreate(lcd_task, 
+                "LCD",
+                DEFAULT_STACK_SIZE,
+                NULL,
+                2, 
+                &LCDTask);
+    
+    if(result != pdPASS) {
+        printf("LCD Task creation failed\n");
+        return 0;
+    }
 
+    
     // Start the scheduler (never returns)
     vTaskStartScheduler();
 
