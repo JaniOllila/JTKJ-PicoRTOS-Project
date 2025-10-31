@@ -30,30 +30,19 @@ enum state {IDLE=0, READ_IMU, UPDATE_DATA, READ_TAG};
 enum state programState = IDLE;
 
 //Creating task prototypes
-static void example_task(void *arg);
 static void imu_task(void *pvParameters);
 static void lcd_task(void *arg);
 static void btn_fxn(uint gpio, uint32_t eventMask);
+static void idle_task(void *arg);
 
 static void btn_fxn(uint gpio, uint32_t eventMask) {
     programState = (programState + 1) % 3;
-    printf("Button pressed, changing state to %d\n", programState); // used copilot auo-completion for this line
-}
-
-
-static void example_task(void *arg){
-    (void)arg;
-
-    for(;;){
-        tight_loop_contents(); // Modify with application code here.
-        vTaskDelay(pdMS_TO_TICKS(2000));
-    }
+    //printf("Button pressed, changing state to %d\n", programState); // used copilot auto-completion for this line
 }
 
 //Creating a task for reading data from IMU sensor
 static void imu_task(void *pvParameters) {
     (void)pvParameters;
-    if (programState == READ_IMU) {
     // Creating a pointer to imu_data structure
     struct imu_data *data = &imuData;
 
@@ -69,29 +58,40 @@ static void imu_task(void *pvParameters) {
     // Start collection data here. Infinite loop. 
     while (1)
     {
-        if (ICM42670_read_sensor_data(&data->ax, &data->ay, &data->az, &data->gx, 
-            &data->gy, &data->gz, &data->t) == 0) {
-            
-               
+        if (programState == READ_IMU) {
+            if (ICM42670_read_sensor_data(&data->ax, &data->ay, &data->az, &data->gx, 
+                &data->gy, &data->gz, &data->t) == 0) {
+                
+                
 
-            //printf("Accel: X=%f, Y=%f, Z=%f | Gyro: X=%f, Y=%f, Z=%f| Temp: %2.2f°C\n", data->ax, data->ay, data->az, 
-                //data->gx, data->gy, data->gz, data->t);
-            
-        } else {
-            printf("Failed to read imu data\n");
+                //printf("Accel: X=%f, Y=%f, Z=%f | Gyro: X=%f, Y=%f, Z=%f| Temp: %2.2f°C\n", data->ax, data->ay, data->az, 
+                    //data->gx, data->gy, data->gz, data->t);
+                
+            } else {
+                printf("Failed to read imu data\n");
+            }
         }
         vTaskDelay(pdMS_TO_TICKS(500));
-    }
     }
 }
 
 //Creating a task for displaying morsecode in LCD
 static void lcd_task(void *arg) {
     (void)arg;
-    if (programState == UPDATE_DATA) {
         init_display();
         for(;;){
-            write_text("---...---.\n");
+            if (programState == UPDATE_DATA) {
+                write_text("---...---.\n");
+                vTaskDelay(pdMS_TO_TICKS(1000));
+            }
+        }
+}
+
+static void idle_task(void *arg) {
+    (void)arg;
+    while (1) {
+        if (programState == IDLE) {
+            printf("Idling\n");
             vTaskDelay(pdMS_TO_TICKS(1000));
         }
     }
@@ -111,20 +111,9 @@ int main() {
     init_button2();
     gpio_set_irq_enabled_with_callback(BUTTON2, GPIO_IRQ_EDGE_RISE, true, btn_fxn);
 
-    TaskHandle_t myExampleTask, IMUTask, LCDTask = NULL;
+    TaskHandle_t IMUTask, LCDTask = NULL;
     // Creating the tasks with xTaskCreate
-    BaseType_t result = xTaskCreate(example_task,       // (en) Task function
-                "example",              // (en) Name of the task 
-                DEFAULT_STACK_SIZE, // (en) Size of the stack for this task (in words). Generally 1024 or 2048
-                NULL,               // (en) Arguments of the task 
-                2,                  // (en) Priority of this task
-                &myExampleTask);    // (en) A handle to control the execution of this task
-
-    if(result != pdPASS) {
-        printf("Example Task creation failed\n");
-        return 0;
-    }
-    result = xTaskCreate(imu_task, 
+    BaseType_t result = xTaskCreate(imu_task, 
                 "IMU",
                 DEFAULT_STACK_SIZE,
                 NULL,
