@@ -22,7 +22,7 @@ struct imu_data {
     float gy;
     float gz;
     float t;
-} imuData = {.ax=0.0, .ay=0.0, .az=0.0, .gx=0.0, .gy=0.0, .gz=0.0, .t=0.0};
+} imuData;
 
 
 //Add here necessary states
@@ -30,22 +30,26 @@ enum state {IDLE=0, READ_IMU, UPDATE_DATA, READ_TAG};
 enum state programState = IDLE;
 
 //Creating task prototypes
-static void imu_task(void *pvParameters);
+static void imu_task(void *arg);
 static void lcd_task(void *arg);
 static void btn_fxn(uint gpio, uint32_t eventMask);
 static void idle_task(void *arg);
+static void serial_task(void *pvParameters);
 
 static void btn_fxn(uint gpio, uint32_t eventMask) {
     programState = (programState + 1) % 3;
-    //printf("Button pressed, changing state to %d\n", programState); // used copilot auto-completion for this line
+    printf("Button pressed, changing state to %d\n", programState); // used copilot auto-completion for this line
 }
 
 //Creating a task for reading data from IMU sensor
 static void imu_task(void *pvParameters) {
     (void)pvParameters;
     // Creating a pointer to imu_data structure
+    
     struct imu_data *data = &imuData;
 
+    //Needed to add this delay because without delay the code never accessed the loop below
+    vTaskDelay(pdMS_TO_TICKS(50));
     // Setting up the sensor. 
     if (init_ICM42670() == 0) {
         printf("ICM-42670P initialized successfully!\n");
@@ -55,23 +59,23 @@ static void imu_task(void *pvParameters) {
     } else {
         printf("Failed to initialize ICM-42670P.\n");
     }
+    
     // Start collection data here. Infinite loop. 
     while (1)
     {
         if (programState == READ_IMU) {
             if (ICM42670_read_sensor_data(&data->ax, &data->ay, &data->az, &data->gx, 
                 &data->gy, &data->gz, &data->t) == 0) {
-                
-                
-
-                //printf("Accel: X=%f, Y=%f, Z=%f | Gyro: X=%f, Y=%f, Z=%f| Temp: %2.2f°C\n", data->ax, data->ay, data->az, 
-                    //data->gx, data->gy, data->gz, data->t);
+            
+                printf("Accel: X=%f, Y=%f, Z=%f | Gyro: X=%f, Y=%f, Z=%f| Temp: %2.2f°C\n", imuData.ax, imuData.ay, imuData.az, 
+                    imuData.gx, imuData.gy, imuData.gz, imuData.t);
                 
             } else {
                 printf("Failed to read imu data\n");
             }
         }
         vTaskDelay(pdMS_TO_TICKS(500));
+        
     }
 }
 
@@ -79,11 +83,13 @@ static void imu_task(void *pvParameters) {
 static void lcd_task(void *arg) {
     (void)arg;
         init_display();
-        for(;;){
+        while(1){
             if (programState == UPDATE_DATA) {
                 write_text("---...---.\n");
-                vTaskDelay(pdMS_TO_TICKS(1000));
+                printf("writing text\n");
             }
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            
         }
 }
 
@@ -91,9 +97,20 @@ static void idle_task(void *arg) {
     (void)arg;
     while (1) {
         if (programState == IDLE) {
-            printf("Idling\n");
-            vTaskDelay(pdMS_TO_TICKS(1000));
+           // printf("Accel: X=%f\n", imuData.ax);
         }
+        vTaskDelay(pdMS_TO_TICKS(500));
+        
+    }
+}
+
+static void serial_task(void *pvParameters) {
+    (void)pvParameters;
+    init_i2c_default();
+    while (1) {
+        uint8_t data[2];
+        //bool ok = i2c_read();
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
 
@@ -106,12 +123,12 @@ int main() {
     }*/ 
     init_hat_sdk();
     sleep_ms(300); //Wait some time so initialization of USB and hat is done.
-
+    init_led();
     // Initializing button2 and making an interruption when pressed to change the state. FYI the button1 seems not to work.
     init_button2();
     gpio_set_irq_enabled_with_callback(BUTTON2, GPIO_IRQ_EDGE_RISE, true, btn_fxn);
 
-    TaskHandle_t IMUTask, LCDTask = NULL;
+    TaskHandle_t IMUTask = NULL, LCDTask = NULL, IDLETask = NULL;
     // Creating the tasks with xTaskCreate
     BaseType_t result = xTaskCreate(imu_task, 
                 "IMU",
@@ -126,13 +143,24 @@ int main() {
     }
     result = xTaskCreate(lcd_task, 
                 "LCD",
-                DEFAULT_STACK_SIZE,
+                1024,
                 NULL,
                 2, 
                 &LCDTask);
     
     if(result != pdPASS) {
         printf("LCD Task creation failed\n");
+        return 0;
+    }
+    result = xTaskCreate(idle_task, 
+                "IDLE",
+                1024,
+                NULL,
+                2, 
+                &IDLETask);
+    
+    if(result != pdPASS) {
+        printf("IDLETask creation failed\n");
         return 0;
     }
 
