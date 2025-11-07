@@ -24,21 +24,59 @@ struct imu_data {
     float t;
 } imuData;
 
+//Creating a buffer for morsecode
+char lcd_buffer[10] = "          "; //10 characters buffer
 
 //Add here necessary states
 enum state {IDLE=0, READ_IMU, UPDATE_DATA, READ_TAG};
 enum state programState = IDLE;
 
-//Creating task prototypes
+//Creating task and function prototypes
 static void imu_task(void *arg);
 static void lcd_task(void *arg);
 static void btn_fxn(uint gpio, uint32_t eventMask);
 static void idle_task(void *arg);
 static void serial_task(void *pvParameters);
+void update_buffer(char *buffer, char new_mark);
+void detect_moves(char *buffer, struct imu_data *data);
+
+void update_buffer(char *buffer, char new_mark) {
+
+    for (int i=0; i<9; i++) {
+        buffer[i] = buffer[i+1];
+    }
+
+    buffer[9] = new_mark;
+}
+
+void detect_moves(char *buffer, struct imu_data *data) {
+    if (data->gz > 100) {
+        update_buffer(buffer, '.');
+        printf("Detected .\n");
+        programState = UPDATE_DATA;
+    }
+    else if (data->gz < -100) {
+        update_buffer(buffer, '-');
+        printf("Detected -\n");
+        programState = UPDATE_DATA;
+    }
+    else if (data->gy > 100) {
+        update_buffer(buffer, ' ');
+        printf("Detected space\n");
+        programState = UPDATE_DATA;
+    }
+    else if (data->gy < -100) {
+        update_buffer(buffer, '\n');
+        printf("Detected new line\n");
+        programState = UPDATE_DATA;
+    }
+    vTaskDelay(pdMS_TO_TICKS(50));
+
+}
 
 static void btn_fxn(uint gpio, uint32_t eventMask) {
-    programState = (programState + 1) % 3;
-    printf("Button pressed, changing state to %d\n", programState); // used copilot auto-completion for this line
+    programState = (programState + 1) % 2;
+    printf("Button pressed, changing state to %d\n", programState); 
 }
 
 //Creating a task for reading data from IMU sensor
@@ -70,11 +108,14 @@ static void imu_task(void *pvParameters) {
                 printf("Accel: X=%f, Y=%f, Z=%f | Gyro: X=%f, Y=%f, Z=%f| Temp: %2.2f°C\n", imuData.ax, imuData.ay, imuData.az, 
                     imuData.gx, imuData.gy, imuData.gz, imuData.t);
                 
+                printf("Current buffer: %s\n", lcd_buffer);
+                detect_moves(lcd_buffer, data);
+                
             } else {
                 printf("Failed to read imu data\n");
             }
+            vTaskDelay(pdMS_TO_TICKS(500));
         }
-        vTaskDelay(pdMS_TO_TICKS(500));
         
     }
 }
@@ -85,10 +126,12 @@ static void lcd_task(void *arg) {
         init_display();
         while(1){
             if (programState == UPDATE_DATA) {
-                write_text("---...---.\n");
-                printf("writing text\n");
+                clear_display();
+                write_text(lcd_buffer);
+                vTaskDelay(pdMS_TO_TICKS(50));
+                programState = READ_IMU;
+                vTaskDelay(pdMS_TO_TICKS(1000));
             }
-            vTaskDelay(pdMS_TO_TICKS(1000));
             
         }
 }
@@ -97,22 +140,21 @@ static void idle_task(void *arg) {
     (void)arg;
     while (1) {
         if (programState == IDLE) {
-           // printf("Accel: X=%f\n", imuData.ax);
+           vTaskDelay(pdMS_TO_TICKS(500));
         }
-        vTaskDelay(pdMS_TO_TICKS(500));
         
     }
 }
 
-static void serial_task(void *pvParameters) {
-    (void)pvParameters;
-    init_i2c_default();
-    while (1) {
-        uint8_t data[2];
+//static void serial_task(void *pvParameters) {
+    //(void)pvParameters;
+    //init_i2c_default();
+   // while (1) {
+        //uint8_t data[2];
         //bool ok = i2c_read();
-        vTaskDelay(pdMS_TO_TICKS(500));
-    }
-}
+        //vTaskDelay(pdMS_TO_TICKS(500));
+    //}
+//}
 
 
 int main() {
@@ -124,7 +166,7 @@ int main() {
     init_hat_sdk();
     sleep_ms(300); //Wait some time so initialization of USB and hat is done.
     init_led();
-    // Initializing button2 and making an interruption when pressed to change the state. FYI the button1 seems not to work.
+    // Initializing button2 and making an interruption when pressed to change the state. FYI the button1 seems not to work on our device.
     init_button2();
     gpio_set_irq_enabled_with_callback(BUTTON2, GPIO_IRQ_EDGE_RISE, true, btn_fxn);
 
@@ -143,7 +185,7 @@ int main() {
     }
     result = xTaskCreate(lcd_task, 
                 "LCD",
-                1024,
+                DEFAULT_STACK_SIZE,
                 NULL,
                 2, 
                 &LCDTask);
