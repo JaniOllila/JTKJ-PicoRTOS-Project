@@ -3,6 +3,7 @@
 #include <pico/stdlib.h>
 
 #include <FreeRTOS.h>
+#include <queue.h>
 #include <task.h>
 
 #include "tkjhat/sdk.h"
@@ -47,9 +48,9 @@ static const char *hellotext_debug [] = {
 
 static volatile uint8_t button_pressed, debug_pressed;
 static void btn_fxn(uint gpio, uint32_t eventMask) {
-    if (gpio  == BUTTON1)
+    if (gpio  == BUTTON2)
         button_pressed = true;
-    else if (gpio == BUTTON2)
+    else if (gpio == BUTTON1)
         debug_pressed = true;
     toggle_led();
 }

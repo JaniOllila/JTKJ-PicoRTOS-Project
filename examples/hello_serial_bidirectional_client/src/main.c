@@ -3,6 +3,7 @@
 #include <pico/stdlib.h>
 
 #include <FreeRTOS.h>
+#include <queue.h>
 #include <task.h>
 
 #include "tkjhat/sdk.h"
