@@ -45,8 +45,9 @@ int morse_line_index = 0;
 
 
 // Creating states for the state machine and making it start at IDLE state
-enum state {IDLE=0, READ_IMU, READ_TAG, UPDATE_DATA, ENCODE_DATA};
+enum state {IDLE=0, READ_IMU, READ_TAG, UPDATE_DATA};
 enum state programState = IDLE;
+enum state previousState = IDLE;
 
 // Creating task and function prototypes
 static void imu_task(void *arg);
@@ -54,10 +55,47 @@ static void lcd_task(void *arg);
 static void btn_fxn(uint gpio, uint32_t eventMask);
 static void idle_task(void *arg);
 static void serial_task(void *pvParameters);
+void update_lines_to_buffer(char* buffer, char* line_buffer);
 void update_buffer(char *buffer, char new_mark);
 void update_last_marks(char *buffer, char new_mark);
+void update_last_marks_client(char *buffer, char new_mark);
 void detect_moves(char *buffer, struct imu_data *data);
 
+void update_lines_to_buffer(char* buffer, char* line_buffer){
+    int start_point = 0;
+    char ch[2] = {0, 0};
+    // Finding the end of the current buffer
+    while (start_point < INPUT_BUFFER_SIZE - 1 && buffer[start_point] != '\0') start_point++;
+
+    // Appending the new line to the end of buffer
+    for (int i= 0; line_buffer[i] != '\0' && i<INPUT_BUFFER_SIZE - 1 && start_point < INPUT_BUFFER_SIZE - 1; i++) {
+        ch[0] = line_buffer[i];
+        buffer[start_point] = ch[0];
+        start_point++;
+    }
+    // Adding a new line character and null terminator at the end
+    buffer[start_point + 1] = '\0';
+
+}
+
+void update_last_marks_client(char *buffer, char new_mark) {
+    
+    for (int i=0; i<2; i++) {
+        buffer[i] = buffer[i+1];
+    }
+    //printf("Last three marks: %s\n", buffer);
+    if (buffer[0] == ' ' && buffer[1] == ' ' && new_mark == '\n') {
+        puts("Detected word break from client message, changing state to UPDATE_DATA\n");
+        for (int i=0; i<=3; i++) {
+            buffer[i] = 0;
+        }
+        previousState = READ_TAG;
+        vTaskDelay(pdMS_TO_TICKS(50));
+        programState = UPDATE_DATA;
+    } 
+}
+
+// Creating a function to update the last three marks buffer. Then checks if the message ending condition is met.
 void update_last_marks(char *buffer, char new_mark) {
     
     for (int i=0; i<2; i++) {
@@ -67,26 +105,25 @@ void update_last_marks(char *buffer, char new_mark) {
     printf("Last three marks: %s\n", buffer);
     if (new_mark == '\n' && buffer[0] == ' ' && buffer[1] == ' ') {
         puts("Detected word break, changing state to UPDATE_DATA\n");
+        previousState = READ_IMU;
+        vTaskDelay(pdMS_TO_TICKS(50));
         programState = UPDATE_DATA;
         
     } 
 }
 
-// Creating a function to update the morsecode buffer. It shift the buffer one index to the left.
+// Creating a function to update the morsecode buffer. 
 void update_buffer(char *buffer, char new_mark) {
     
     for (int i=0; i<=INPUT_BUFFER_SIZE - 1; i++) {
         if (buffer[i] == '\0') {
             buffer[i] = new_mark;
-            update_last_marks(last_marks, new_mark);
             break;
-        }else{
-
         }
 
     }
-    
     update_last_marks(last_marks, new_mark);
+    
 }
 
 // Creating a function to detect physical movements that creates morsecode marks. After that changing state to UPDATE_DATA to print the new mark to lcd.
@@ -161,10 +198,13 @@ static void lcd_task(void *arg) {
         // it waits a bit and changes the state to READ_IMU to continue creating the message.
         while(1){
             if (programState == UPDATE_DATA) {
-                // one line can be 21 marks long
-                morsebuffer_to_text(mark_buffer, decoded_text);
-                sprintf(text_buffer, "Decoded message: %s\n", decoded_text);
-                puts(text_buffer);
+                // Testing if previous state was READ_IMU to decode the message
+                //if (previousState == READ_IMU) {
+                    morsebuffer_to_text(mark_buffer, decoded_text);
+                    sprintf(text_buffer, "Decoded message: %s\n", decoded_text);
+                    puts(text_buffer);
+                //}
+        
                 clear_display();
                 // Initialize coordinates for text pringting
                 int16_t x = 0;
@@ -177,6 +217,7 @@ static void lcd_task(void *arg) {
                     ch[0] = mark_buffer[i];
                     // Testing if the end of the buffer is reached
                     if (ch[0] == '\0') {
+                        puts("Message was sent successfully to LCD!\n");
                         break;
                     }
                     // Testing if character is newline
@@ -184,7 +225,7 @@ static void lcd_task(void *arg) {
                         x = 0;
                         y += 10; // Move to next line
                     } 
-                    // Testing if one line is full, if yes move to next line
+                    // Testing if one line is full (21 marks), if yes move to next line
                     else if (x >= 126){
                         x = 0;
                         y += 10;
@@ -195,10 +236,13 @@ static void lcd_task(void *arg) {
                         x += 6; // Move to next character position
                     }
                 }
-                puts("Message was sent successfully to LCD!\n");
+                
                 
                 vTaskDelay(pdMS_TO_TICKS(300)); 
-                programState = READ_IMU;
+                // Clear the mark buffer after displaying
+                mark_buffer[0] = '\0'; 
+                
+                programState = previousState; // Change back to previous state (READ_IMU or READ_TAG)
                 vTaskDelay(pdMS_TO_TICKS(100));
             }
 
@@ -230,21 +274,28 @@ static void serial_task(void *arg) {
         if (programState == READ_TAG){
             int c = getchar_timeout_us(0);
             if (c != PICO_ERROR_TIMEOUT){
-                if (c == '\r') continue; // ignore CR, wait for LF if (ch == '\n') { line[len] = '\0';
+                if (c == '\r') {
+                    update_last_marks_client(last_marks, c);
+                    continue;
+                }
                 if (c == '\n'){
                     // terminate and process the collected line
                     line[index] = '\0'; 
                     printf("__CLIENT:\"%s\"__\n", line); //Print as debug in the output
-                    
+                    update_lines_to_buffer(mark_buffer, line);
+                    update_last_marks_client(last_marks, c);
                     index = 0;
                     vTaskDelay(pdMS_TO_TICKS(100)); // Wait for new message
+
                 }
                 else if(index < INPUT_BUFFER_SIZE - 1){
                     line[index++] = (char)c;
                 }
                 else { //Overflow: print and restart the buffer with the new character. 
                     line[INPUT_BUFFER_SIZE - 1] = '\0';
-                    printf("__CLIENT:\"%s\"__\n", line);
+                    printf("__CLIENT:\"%s\"__\n", line); //Print as debug in the output
+                    update_lines_to_buffer(mark_buffer, line);
+                    update_last_marks_client(last_marks, c);
                     index = 0; 
                     line[index++] = (char)c; 
                 }
@@ -273,12 +324,12 @@ int main() {
     init_display();
     // Setting up the IMU sensor. 
     if (init_ICM42670() == 0) {
-        printf("ICM-42670P initialized successfully!\n");
+        puts("ICM-42670P initialized successfully!\n");
         if (ICM42670_start_with_default_values() != 0){
-            printf("ICM-42670P could not initialize accelerometer or gyroscope");
+            puts("ICM-42670P could not initialize accelerometer or gyroscope");
         }
     } else {
-        printf("Failed to initialize ICM-42670P.\n");
+        puts("Failed to initialize ICM-42670P.\n");
     }
 
     // Initializing button2 and making an interruption when pressed to change the state. FYI the button1 seems not to work on our device.

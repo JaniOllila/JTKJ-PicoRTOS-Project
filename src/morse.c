@@ -131,27 +131,39 @@ void morse_line_to_text(const char *morse_line, char *out, int out_size)
     out[out_i] = '\0';
 }
 
+//From this point on AI (copilot) was only used to figure out what was wrong with functions below. It had issues with
+// the looping and indexing of decoded_line_to_buffer. It didn't change any logic but a better structure of the function. 
+
+
+// This function first finds the end of the current decoded_buffer and continues the new line from there. After adding the new line to the decoded_buffer,
+//it adds a new line character and null terminator at the end. 
 void decoded_line_to_buffer(char* decoded_buffer, char* decoded_line_buffer) {
     int start_point = 0;
+    // Finding the end of the current decoded_buffer
     while (start_point < INPUT_BUFFER_SIZE - 1 && decoded_buffer[start_point] != '\0') start_point++;
 
+    // Appending the new decoded line to the end of decoded_buffer
     for (int i= 0; decoded_line_buffer[i] != '\0' && i<INPUT_BUFFER_SIZE - 1 && start_point < INPUT_BUFFER_SIZE - 1; i++) {
         decoded_buffer[start_point] = decoded_line_buffer[i];
         start_point++;
     }
-
+    // Adding a new line character and null terminator at the end
     decoded_buffer[start_point] = '\n';
     decoded_buffer[start_point + 1] = '\0';
 
 }
 
+// This function translates the entire morse_buffer into text using the functions above. 
+
 void morsebuffer_to_text(const char *morse_buffer, char* decoded_buffer) {
+    // Creating temporary buffers for processing lines and a index j for line buffer
     char line_buf[INPUT_BUFFER_SIZE];
     char decoded_line_buf[INPUT_BUFFER_SIZE];
     int j = 0;
 
+    // Looping through the morse_buffer
     for (int i = 0; i < INPUT_BUFFER_SIZE - 1; i++) {
-        //Checking if end of morse buffer is reached
+        //Checking if end of morse buffer is reached. If yes, then process the last line and break the loop.
         if (morse_buffer[i] == '\0') {
             line_buf[j] = '\0';
             morse_line_to_text(line_buf, decoded_line_buf, INPUT_BUFFER_SIZE);
@@ -161,7 +173,7 @@ void morsebuffer_to_text(const char *morse_buffer, char* decoded_buffer) {
             decoded_line_buf[0] = '\0';
             break;
         }
-        // Checking for new line to decode the line
+        // Checking for new line to decode the line. If yes, then process the line buffer and reset the temporary buffers and index j.
         else if (morse_buffer[i] == '\n') {
             line_buf[j] = '\0';
             morse_line_to_text(line_buf, decoded_line_buf, INPUT_BUFFER_SIZE);
@@ -170,7 +182,7 @@ void morsebuffer_to_text(const char *morse_buffer, char* decoded_buffer) {
             line_buf[0] = '\0';
             decoded_line_buf[0] = '\0';
         }
-        // Checking if line buffer size is reached
+        // Checking if line buffer size is reached. If yes, then process the line buffer and reset the temporary buffers and index j.
         else if (i == INPUT_BUFFER_SIZE - 1){
             line_buf[j] = '\0';
             morse_line_to_text(line_buf, decoded_line_buf, INPUT_BUFFER_SIZE);
@@ -179,7 +191,7 @@ void morsebuffer_to_text(const char *morse_buffer, char* decoded_buffer) {
             line_buf[0] = '\0';
             decoded_line_buf[0] = '\0';
         }
-        // If not end or new line, keep adding to line buffer
+        // If not end or new line, keep adding to line buffer and increase index j by one.
         else{
             line_buf[j] = morse_buffer[i];
             j++;
