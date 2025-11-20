@@ -30,7 +30,7 @@ struct imu_data {
 } imuData;
 
 // Creating a buffer for the last three marks. 
-char last_marks[4] = {0, 0 , 0, 0};
+char last_marks[3] = {0, 0 , 0};
 
 // Creating a text buffer for debugging messages
 char text_buffer[INPUT_BUFFER_SIZE];
@@ -59,6 +59,7 @@ void update_lines_to_buffer(char* buffer, char* line_buffer);
 void update_buffer(char *buffer, char new_mark);
 void update_last_marks(char *buffer, char new_mark);
 void update_last_marks_client(char *buffer, char new_mark);
+void check_message_end_client(char *buffer);
 void detect_moves(char *buffer, struct imu_data *data);
 
 void update_lines_to_buffer(char* buffer, char* line_buffer){
@@ -78,21 +79,24 @@ void update_lines_to_buffer(char* buffer, char* line_buffer){
 
 }
 
+// Creating a function to update the last three marks buffer for the client input.
 void update_last_marks_client(char *buffer, char new_mark) {
     
     for (int i=0; i<2; i++) {
         buffer[i] = buffer[i+1];
     }
-    //printf("Last three marks: %s\n", buffer);
-    if (buffer[0] == ' ' && buffer[1] == ' ' && new_mark == '\n') {
-        puts("Detected word break from client message, changing state to UPDATE_DATA\n");
-        for (int i=0; i<=3; i++) {
-            buffer[i] = 0;
-        }
+    
+}
+
+// Creating function to check if the message ending condition is met for the client input.
+void check_message_end_client(char *buffer) {
+    if (buffer[1] == ' ' && buffer[2] == ' ') {
+        puts("Detected word break from client, changing state to UPDATE_DATA\n");
         previousState = READ_TAG;
         vTaskDelay(pdMS_TO_TICKS(50));
         programState = UPDATE_DATA;
-    } 
+        
+    }
 }
 
 // Creating a function to update the last three marks buffer. Then checks if the message ending condition is met.
@@ -283,6 +287,7 @@ static void serial_task(void *arg) {
                     line[index] = '\0'; 
                     printf("__CLIENT:\"%s\"__\n", line); //Print as debug in the output
                     update_lines_to_buffer(mark_buffer, line);
+                    check_message_end_client(last_marks);
                     update_last_marks_client(last_marks, c);
                     index = 0;
                     vTaskDelay(pdMS_TO_TICKS(100)); // Wait for new message
