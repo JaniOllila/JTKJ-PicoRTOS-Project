@@ -271,7 +271,7 @@ static void serial_task(void *arg) {
     // the data is coming from.
     (void)arg;
     
-    char *line = text_buffer;
+    char line[INPUT_BUFFER_SIZE];
     size_t index = 0;
     
     while (1){
@@ -279,7 +279,6 @@ static void serial_task(void *arg) {
             int c = getchar_timeout_us(0);
             if (c != PICO_ERROR_TIMEOUT){
                 if (c == '\r') {
-                    update_last_marks_client(last_marks, c);
                     continue;
                 }
                 if (c == '\n'){
@@ -294,6 +293,7 @@ static void serial_task(void *arg) {
 
                 }
                 else if(index < INPUT_BUFFER_SIZE - 1){
+                    update_last_marks_client(last_marks, c);
                     line[index++] = (char)c;
                 }
                 else { //Overflow: print and restart the buffer with the new character. 
