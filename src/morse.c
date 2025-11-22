@@ -41,11 +41,7 @@ static struct MorseRow morse_chars[] = {
 };
 
 static const int morse_chars_len = sizeof(morse_chars) / sizeof(morse_chars[0]);
-// Prototypes
-char morse_symbol_to_char(const char *symbol);
-void morse_line_to_text(const char *morse_line, char *out, int out_size);
-void decoded_line_to_buffer(char* decoded_buffer, char* decoded_line_buffer);
-void morsebuffer_to_text(const char *morse_buffer, char* decoded_buffer);
+
 
 //Converts single morse code symbol to character
 char morse_symbol_to_char(const char *symbol)
@@ -74,7 +70,7 @@ void morse_line_to_text(const char *morse_line, char *out, int out_size)
 
 
     //Check input character by character
-    while (morse_line[i] != '\0' && out_i <= out_size - 1) {
+    while (morse_line[i] != '\0' && out_i < out_size - 1) {
 
         char ch = morse_line[i];
 

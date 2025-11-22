@@ -8,7 +8,7 @@
 #include <FreeRTOS.h>
 #include <queue.h>
 #include <task.h>
-#include "morse.c"
+#include "morse.h"
 
 #include "tkjhat/sdk.h"
   

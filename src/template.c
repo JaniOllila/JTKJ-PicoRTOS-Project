@@ -8,7 +8,7 @@
 #include <FreeRTOS.h>
 #include <queue.h>
 #include <task.h>
-#include "morse.c"
+#include "morse.h"
 #define RED_LED_PIN           14
 #define LED1                  RED_LED_PIN
 #define RGB_LED_G             19
@@ -80,6 +80,7 @@ void update_lines_to_buffer(char* buffer, char* line_buffer){
         start_point++;
     }
     // Adding a new line character and null terminator at the end
+    buffer[start_point] = '\n';
     buffer[start_point + 1] = '\0';
 
 }
@@ -91,6 +92,8 @@ void update_last_marks_client(char *buffer, char new_mark) {
         buffer[i] = buffer[i+1];
     }
     
+    // Store newest character
+    buffer[2] = new_mark;
 }
 
 // Creating function to check if the message ending condition is met for the client input.
