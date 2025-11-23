@@ -1,4 +1,5 @@
 
+// Jani Ollila, Niko Laukka, Joona Myllymäki
 #include <stdio.h>
 #include <string.h>
 
@@ -9,9 +10,9 @@
 #include <queue.h>
 #include <task.h>
 #include "morse.h"
-#define RED_LED_PIN           14
-#define LED1                  RED_LED_PIN
+#define RGB_LED_R             18
 #define RGB_LED_G             19
+#define RGB_LED_B             20
 
 #include "tkjhat/sdk.h"
   
@@ -64,8 +65,9 @@ void update_last_marks(char *buffer, char new_mark);
 void update_last_marks_client(char *buffer, char new_mark);
 void check_message_end_client(char *buffer);
 void detect_moves(char *buffer, struct imu_data *data);
-void init_led(void);
-void toggle_led(void);
+void init_rgb_led(void);
+void rgb_led_write(uint8_t r, uint8_t g, uint8_t b);
+void stop_rgb_led();
 
 void update_lines_to_buffer(char* buffer, char* line_buffer){
     int start_point = 0;
@@ -144,6 +146,8 @@ void detect_moves(char *buffer, struct imu_data *data) {
     // Counters for consecutive samples above/below threshold
     static int dot_counter  = 0;
     static int dash_counter = 0;
+    static int space_counter = 0;
+    static int nl_counter = 0;
 
     float gx = data->gx;
     float gy = data->gy;
@@ -157,10 +161,9 @@ void detect_moves(char *buffer, struct imu_data *data) {
         if (dot_counter >= 3) {
             update_buffer(buffer, '.');
             puts("Detected .");
-            toggle_led();
-            sleep_ms(400);
-            toggle_led();
-            sleep_ms(150);
+            rgb_led_write(20,0,0);
+            sleep_ms(500);
+            rgb_led_write(0,0,0);
 
             // reset so we don't keep detecting the same movement
             dot_counter = 0;
@@ -175,10 +178,12 @@ void detect_moves(char *buffer, struct imu_data *data) {
         if (dash_counter >= 3) {
             update_buffer(buffer, '-');
             puts("Detected -");
-            toggle_led();
-            sleep_ms(800);
-            toggle_led();
-            sleep_ms(150);
+            for (int i = 0; i < 2; i++) {
+                    rgb_led_write(20,0,0);
+                    sleep_ms(300);
+                    rgb_led_write(0,0,0);
+                    sleep_ms(300);
+    }
 
             dash_counter = 0;
         }
@@ -190,12 +195,31 @@ void detect_moves(char *buffer, struct imu_data *data) {
         dash_counter = 0;
 
         if (gy > 100) {
-            update_buffer(buffer, ' ');
-            puts("Detected space");
+            space_counter++;
+            nl_counter = 0;
+            if (space_counter >= 3) {
+                update_buffer(buffer, ' ');
+                puts("Detected space");
+                rgb_led_write(0,20,0);
+                sleep_ms(500);
+                rgb_led_write(0,0,0);
+                space_counter = 0;
+            }
         }
         else if (gy < -100) {
-            update_buffer(buffer, '\n');
-            puts("Detected new line");
+            nl_counter++;
+            space_counter = 0;
+            if (nl_counter >= 3) {
+                update_buffer(buffer, '\n');
+                puts("Detected newline");
+                for (int i = 0; i < 1; i++) {
+                    rgb_led_write(0,0,20);
+                    sleep_ms(500);
+                    rgb_led_write(0,0,0);
+                    sleep_ms(500);
+    }
+                nl_counter = 0;
+            }
         }
     }
 
@@ -252,10 +276,10 @@ static void lcd_task(void *arg) {
                 //if (previousState == READ_IMU) {
                     morsebuffer_to_text(mark_buffer, decoded_text);
                 for (int i = 0; i < 3; i++) {
-                    toggle_led();
-                    sleep_ms(300);
-                    toggle_led();
-                    sleep_ms(120);
+                    rgb_led_write(0,0,20);
+                    sleep_ms(500);
+                    rgb_led_write(0,0,0);
+                    sleep_ms(500);
     }
                     sprintf(text_buffer, "Decoded message: %s\n", decoded_text);
                     puts(text_buffer);
@@ -311,6 +335,8 @@ static void idle_task(void *arg) {
     (void)arg;
     while (1) {
         if (programState == IDLE) {
+            init_rgb_led(); // start the RGB led for input feedback
+            rgb_led_write(5,5,5); // Dim light on startup
            vTaskDelay(pdMS_TO_TICKS(500));
         }
         
