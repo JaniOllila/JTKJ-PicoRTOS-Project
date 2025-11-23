@@ -9,7 +9,6 @@
 #include <queue.h>
 #include <task.h>
 #include "morse.h"
-#include "morse.c"
 #define RED_LED_PIN           14
 #define LED1                  RED_LED_PIN
 #define RGB_LED_G             19
@@ -139,37 +138,68 @@ void update_buffer(char *buffer, char new_mark) {
     
 }
 
-// Creating a function to detect physical movements that creates morsecode marks. After that changing state to UPDATE_DATA to print the new mark to lcd.
+// Creating a function to detect physical movements that creates morsecode marks.
+// Uses simple counters to avoid reacting to very short spikes.
 void detect_moves(char *buffer, struct imu_data *data) {
-    if (data->gx > 100) {
-        update_buffer(buffer, '.');
-        puts("Detected .");
-        toggle_led();
-        sleep_ms(400);
-        toggle_led();
-        sleep_ms(150);
-    }
-    else if (data->gx < -100) {
-        update_buffer(buffer, '-');
-        puts("Detected -");
-        toggle_led();
-        sleep_ms(800);
-        toggle_led();
-        sleep_ms(150);
-        
-    }
-    else if (data->gy > 100) {
-        update_buffer(buffer, ' ');
-        puts("Detected space");
-        
-    }
-    else if (data->gy < -100) {
-        update_buffer(buffer, '\n');
-        puts("Detected new line");
-        
-    }
-    vTaskDelay(pdMS_TO_TICKS(50));
+    // Counters for consecutive samples above/below threshold
+    static int dot_counter  = 0;
+    static int dash_counter = 0;
 
+    float gx = data->gx;
+    float gy = data->gy;
+
+    // Check dot direction (positive gx)
+    if (gx > 100) {
+        dot_counter++;
+        dash_counter = 0;   // reset opposite counter
+
+        // Require e.g. 3 consecutive measurements to detect a dot
+        if (dot_counter >= 3) {
+            update_buffer(buffer, '.');
+            puts("Detected .");
+            toggle_led();
+            sleep_ms(400);
+            toggle_led();
+            sleep_ms(150);
+
+            // reset so we don't keep detecting the same movement
+            dot_counter = 0;
+        }
+    }
+    // Check dash direction (negative gx)
+    else if (gx < -100) {
+        dash_counter++;
+        dot_counter = 0;    // reset opposite counter
+
+        // Require 3 consecutive measurements to detect a dash
+        if (dash_counter >= 3) {
+            update_buffer(buffer, '-');
+            puts("Detected -");
+            toggle_led();
+            sleep_ms(800);
+            toggle_led();
+            sleep_ms(150);
+
+            dash_counter = 0;
+        }
+    }
+    // gx is in neutral area -> reset counters and check gy for space/newline
+    else {
+        // Neutral position: no movement in dot/dash direction
+        dot_counter  = 0;
+        dash_counter = 0;
+
+        if (gy > 100) {
+            update_buffer(buffer, ' ');
+            puts("Detected space");
+        }
+        else if (gy < -100) {
+            update_buffer(buffer, '\n');
+            puts("Detected new line");
+        }
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(50));
 }
 
 // Creating a button interrupt function to change the state machine state when button2 is pressed.
@@ -204,7 +234,7 @@ static void imu_task(void *pvParameters) {
             } else {
                 puts("Failed to read imu data\n");
             }
-            vTaskDelay(pdMS_TO_TICKS(500));
+            vTaskDelay(pdMS_TO_TICKS(50));
         }
         
     }
@@ -266,7 +296,8 @@ static void lcd_task(void *arg) {
                 
                 vTaskDelay(pdMS_TO_TICKS(300)); 
                 // Clear the mark buffer after displaying
-                mark_buffer[0] = '\0'; 
+                mark_buffer[0] = '\0';
+                decoded_text[0] = '\0'; 
                 
                 programState = previousState; // Change back to previous state (READ_IMU or READ_TAG)
                 vTaskDelay(pdMS_TO_TICKS(100));
