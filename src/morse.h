@@ -1,3 +1,5 @@
+
+// Jani Ollila, Niko Laukka, Joona Myllymäki
 #ifndef MORSE_H
 #define MORSE_H
 
@@ -18,3 +20,4 @@ void decoded_line_to_buffer(char* decoded_buffer, char* decoded_line_buffer);
 void morsebuffer_to_text(const char *morse_buffer, char* decoded_buffer);
 
 #endif
+
