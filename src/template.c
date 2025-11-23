@@ -9,6 +9,7 @@
 #include <queue.h>
 #include <task.h>
 #include "morse.h"
+#include "morse.c"
 #define RED_LED_PIN           14
 #define LED1                  RED_LED_PIN
 #define RGB_LED_G             19
