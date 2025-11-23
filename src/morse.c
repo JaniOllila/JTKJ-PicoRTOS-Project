@@ -1,3 +1,5 @@
+
+// Jani Ollila, Niko Laukka, Joona Myllymäki
 #include <string.h>
 #include "morse.h"
 #define INPUT_BUFFER_SIZE 256
@@ -194,6 +196,7 @@ void morsebuffer_to_text(const char *morse_buffer, char* decoded_buffer) {
         }
 
     }
+
 
 
 }
